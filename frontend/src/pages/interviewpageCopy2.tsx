@@ -312,27 +312,27 @@ const InterviewPage = () => {
     // ElevenLabs Conversational AI - try multiple formats
     
     // Format 1: Simple text object
-    const format1 = { text: text };
+    // const format1 = { text: text };
     
     // Format 2: With type field
     const format2 = { type: "text", text: text };
     
     // Format 3: User message format
-    const format3 = { 
-      type: "user_message",
-      user_message: {
-        text: text
-      }
-    };
+    // const format3 = { 
+    //   type: "user_message",
+    //   user_message: {
+    //     text: text
+    //   }
+    // };
 
     // Format 4: Chat message format
-    const format4 = {
-      type: "chat_message",
-      chat_message: {
-        role: "user",
-        content: text
-      }
-    };
+    // const format4 = {
+    //   type: "chat_message",
+    //   chat_message: {
+    //     role: "user",
+    //     content: text
+    //   }
+    // };
 
     // Let's try format 2 first (type + text)
     const message = format2;
