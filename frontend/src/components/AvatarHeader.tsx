@@ -4,9 +4,10 @@ import type HRAvatar from "./HRAvatar";
 type AvatarDetails = {
   name: string;
   role: string;
-  voiceId: string;
+  voiceId?: string;  // Optional for backward compatibility
+  agentId?: string;  // Used by V2 with ElevenLabs Conversational AI
   component: typeof HRAvatar;
-  firstMessage: string;
+  firstMessage?: string;  // Optional - configured in ElevenLabs for V2
 };
 
 interface AvatarHeaderProps {
