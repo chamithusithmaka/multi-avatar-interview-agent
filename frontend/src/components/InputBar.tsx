@@ -16,7 +16,7 @@ interface InputBarProps {
 
 const InputBar: FC<InputBarProps> = ({
   userInput,
-  interimTranscript,
+  // interimTranscript,
   isRecording,
   isSpeaking,
   isLoading,
@@ -59,15 +59,15 @@ const InputBar: FC<InputBarProps> = ({
           <div className="flex-1 bg-gray-100 rounded-2xl px-3 md:px-4 py-2.5 md:py-3 flex items-center gap-2 md:gap-3">
             <input
               type="text"
-              value={userInput + interimTranscript}
-              onChange={(e) => !isRecording && onInputChange(e.target.value)}
+              value={userInput}
+              onChange={(e) => onInputChange(e.target.value)}
               onKeyPress={onKeyPress}
               placeholder={
-                isRecording
-                  ? "🎤 Listening... (auto-submits after 4s silence)"
-                  : isSpeaking
+                isSpeaking
                   ? "Wait for question to finish..."
-                  : "Use voice (recommended) or type here..."
+                  : isRecording
+                  ? "🎤 Listening... Type or speak your answer"
+                  : "Type your answer here..."
               }
               disabled={isSpeaking || isLoading}
               className="flex-1 bg-transparent outline-none text-gray-900 placeholder-gray-500 text-sm md:text-base"
