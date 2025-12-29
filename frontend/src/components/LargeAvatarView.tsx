@@ -4,9 +4,10 @@ import type HRAvatar from "./HRAvatar";
 type AvatarDetails = {
   name: string;
   role: string;
-  voiceId: string;
+  voiceId?: string;  // Optional for backward compatibility
+  agentId?: string;  // Used by V2 with ElevenLabs Conversational AI
   component: typeof HRAvatar;
-  firstMessage: string;
+  firstMessage?: string;  // Optional - configured in ElevenLabs for V2
 };
 
 interface LargeAvatarViewProps {
@@ -14,6 +15,8 @@ interface LargeAvatarViewProps {
   avatarDetails: Record<string, AvatarDetails>;
   selectedAvatar: string | null;
   speakingAvatar: string | null;
+  isSpeaking?: boolean;
+  onSelectAvatar?: (avatarId: string) => void;
 }
 
 const LargeAvatarView: FC<LargeAvatarViewProps> = ({
@@ -21,6 +24,8 @@ const LargeAvatarView: FC<LargeAvatarViewProps> = ({
   avatarDetails,
   selectedAvatar,
   speakingAvatar,
+  isSpeaking = false,
+  onSelectAvatar,
 }) => {
   return (
     <>
@@ -29,7 +34,7 @@ const LargeAvatarView: FC<LargeAvatarViewProps> = ({
           <h1 className="text-3xl md:text-5xl font-bold text-gray-900 mb-2 md:mb-4">
             Interview in Progress
           </h1>
-          <p className="text-base md:text-xl text-gray-600">Interview is running in the background</p>
+          <p className="text-base md:text-xl text-gray-600">Click an interviewer to switch</p>
         </div>
       </div>
 
@@ -42,9 +47,16 @@ const LargeAvatarView: FC<LargeAvatarViewProps> = ({
             const AvatarComponent = avatar.component;
 
             return (
-              <div key={avatarId} className="flex flex-col items-center w-full md:w-auto">
+              <div 
+                key={avatarId} 
+                className={`flex flex-col items-center w-full md:w-auto cursor-pointer transition-all ${
+                  isSpeaking && !isCurrentlySpeaking ? "opacity-50 pointer-events-none" : "hover:scale-105"
+                }`}
+                onClick={() => onSelectAvatar?.(avatarId)}
+                title={isSpeaking ? "Wait for speaker to finish" : `Switch to ${avatar.name}`}
+              >
                 <div
-                  className={`transition-all duration-300 ${isActive ? "scale-110" : "opacity-70"}`}
+                  className={`transition-all duration-300 ${isActive ? "scale-110" : "opacity-70 hover:opacity-90"}`}
                 >
                   <AvatarComponent isActive={isActive} isSpeaking={isCurrentlySpeaking} />
                 </div>
