@@ -1,7 +1,10 @@
 import { useState } from "react";
 import SplashScreen from "./components/SplashScreen";
 import HomePage from "./pages/HomePage";
-import InterviewPage from "./pages/InterviewPage";
+// Old version using separate Gemini API + browser STT + ElevenLabs TTS
+// import InterviewPage from "./pages/InterviewPage";
+// New version using ElevenLabs Conversational AI (agent handles LLM + STT + TTS)
+import InterviewPageV2 from "./pages/InterviewPageV2";
 
 function App() {
   const [showSplash, setShowSplash] = useState(true);
@@ -17,7 +20,7 @@ function App() {
     return <HomePage onGetStarted={handleGetStarted} />;
 
   if (page === "interview") 
-    return <InterviewPage />;
+    return <InterviewPageV2 />;
 
   return null;
 }
