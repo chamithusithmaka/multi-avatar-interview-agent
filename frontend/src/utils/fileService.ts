@@ -20,10 +20,13 @@ export const readFileContent = (file: File): Promise<string> => {
       reject(error);
     };
 
+    // Only read text files - PDFs and DOCs need special parsing
     if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
       reader.readAsText(file);
     } else {
-      reader.readAsText(file);
+      // For non-text files, just return the filename as a placeholder
+      // In a real app, you'd use a PDF parser library
+      resolve(`[Attached file: ${file.name}]`);
     }
   });
 };
