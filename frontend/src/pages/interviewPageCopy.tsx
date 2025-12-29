@@ -21,7 +21,7 @@ const InterviewPage = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
   const [interviewStarted, setInterviewStarted] = useState(false);
-  const [interviewTopic, setInterviewTopic] = useState("");
+  // const [interviewTopic, setInterviewTopic] = useState("");
   const [messageIdCounter, setMessageIdCounter] = useState(0);
   const [speakingAvatar, setSpeakingAvatar] = useState<string | null>(null);
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
@@ -520,7 +520,7 @@ Generate exactly 5 questions, numbered 1-5, one per line. Make them specific to 
       setIsRecording(false);
     }
 
-    setInterviewTopic(userInput);
+    // setInterviewTopic(userInput);
     setIsLoading(true);
     setInterviewStarted(true);
 
