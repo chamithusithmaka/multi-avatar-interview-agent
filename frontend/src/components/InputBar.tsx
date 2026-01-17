@@ -16,7 +16,7 @@ interface InputBarProps {
 
 const InputBar: FC<InputBarProps> = ({
   userInput,
-  // interimTranscript,
+  interimTranscript,
   isRecording,
   isSpeaking,
   isLoading,
@@ -33,25 +33,33 @@ const InputBar: FC<InputBarProps> = ({
         <div className="flex gap-2 md:gap-3 items-end">
           <button
             onClick={onToggleRecording}
-            disabled={isSpeaking}
+            disabled={isSpeaking || isLoading}
             className={`p-3 md:p-4 rounded-xl transition-all flex-shrink-0 relative ${
-              isRecording
+              isSpeaking
+                ? "bg-gray-300 text-gray-400 cursor-not-allowed opacity-50"
+                : isRecording
                 ? "bg-red-500 text-white animate-pulse shadow-2xl ring-4 ring-red-300 scale-110"
-                : "bg-gray-100 text-gray-600 hover:bg-red-50 hover:text-red-600 active:bg-gray-300 shadow-md"
-            } ${!isRecording && !isSpeaking ? "ring-2 ring-[#A84448]/50 animate-pulse" : ""}`}
-            title={isRecording ? "Click to stop recording" : "Start voice recording (Recommended)"}
+                : "bg-gray-100 text-gray-600 hover:bg-red-50 hover:text-red-600 active:bg-gray-300 shadow-md ring-2 ring-[#A84448]/50"
+            }`}
+            title={isSpeaking ? "Wait for interviewer to finish" : isRecording ? "Click to stop recording" : "Start voice recording"}
           >
-            <svg className="w-6 h-6 md:w-7 md:h-7" fill="currentColor" viewBox="0 0 20 20">
-              <path
-                fillRule="evenodd"
-                d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z"
-                clipRule="evenodd"
-              />
-            </svg>
-            {!isRecording && !isSpeaking && (
+            {isSpeaking ? (
+              <svg className="w-6 h-6 md:w-7 md:h-7" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            ) : (
+              <svg className="w-6 h-6 md:w-7 md:h-7" fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  fillRule="evenodd"
+                  d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            )}
+            {isRecording && !isSpeaking && (
               <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
               </span>
             )}
           </button>
@@ -59,17 +67,17 @@ const InputBar: FC<InputBarProps> = ({
           <div className="flex-1 bg-gray-100 rounded-2xl px-3 md:px-4 py-2.5 md:py-3 flex items-center gap-2 md:gap-3">
             <input
               type="text"
-              value={userInput}
+              value={userInput + (interimTranscript ? ` ${interimTranscript}` : "")}
               onChange={(e) => onInputChange(e.target.value)}
               onKeyPress={onKeyPress}
               placeholder={
                 isSpeaking
                   ? "Wait for question to finish..."
                   : isRecording
-                  ? "🎤 Listening... Type or speak your answer"
+                  ? "🎤 Recording... Speak your answer"
                   : "Type your answer here..."
               }
-              disabled={isSpeaking || isLoading}
+              disabled={isSpeaking || isLoading || isRecording}
               className="flex-1 bg-transparent outline-none text-gray-900 placeholder-gray-500 text-sm md:text-base"
             />
             {isRecording && (
@@ -105,10 +113,34 @@ const InputBar: FC<InputBarProps> = ({
           </button>
         </div>
 
-        {isRecording && (
+        {isSpeaking && (
+          <div className="mt-2 text-center">
+            <p className="text-xs text-amber-600 font-medium">
+              ⏳ Wait for the interviewer to finish speaking...
+            </p>
+          </div>
+        )}
+
+        {isRecording && !isSpeaking && (
+          <div className="mt-2 text-center">
+            <p className="text-xs text-red-600 font-medium">
+              🎤 Recording... Click mic to stop, then click Send to submit your answer.
+            </p>
+          </div>
+        )}
+
+        {!isRecording && !isSpeaking && userInput && (
+          <div className="mt-2 text-center">
+            <p className="text-xs text-green-600 font-medium">
+              ✅ Ready to submit! Click Send or press Enter.
+            </p>
+          </div>
+        )}
+
+        {!isRecording && !isSpeaking && !userInput && (
           <div className="mt-2 text-center">
             <p className="text-xs text-gray-500">
-              💡 Keep speaking naturally. Answer will auto-submit after 4 seconds of silence.
+              💡 Take your time! Click 🎤 to record or type your answer. Press Send when ready.
             </p>
           </div>
         )}
