@@ -16,14 +16,14 @@ const RecordingIndicator: FC<RecordingIndicatorProps> = ({ userInput, interimTra
             <div className="w-2 h-3 bg-white rounded-full animate-pulse delay-150"></div>
           </div>
           <span className="text-sm font-bold">🎤 Recording...</span>
-          <span className="text-xs opacity-80">(auto-submits after 4s silence)</span>
+          <span className="text-xs opacity-80">(click Send when ready)</span>
         </div>
         <p className="text-base md:text-lg leading-relaxed break-words min-h-[2rem]">
           {userInput ? (
             <>
               {userInput}
               {interimTranscript && (
-                <span className="opacity-60 italic">{interimTranscript}</span>
+                <span className="opacity-60 italic"> {interimTranscript}</span>
               )}
             </>
           ) : (
@@ -33,7 +33,7 @@ const RecordingIndicator: FC<RecordingIndicatorProps> = ({ userInput, interimTra
           )}
         </p>
         <div className="mt-3 pt-3 border-t border-white/20 flex items-center justify-between">
-          <span className="text-xs opacity-70">Click mic to stop manually</span>
+          <span className="text-xs opacity-70">Click 🎤 to stop, then Send to submit</span>
           <div className="flex items-center gap-2 text-xs">
             <div className="w-2 h-2 bg-white rounded-full animate-ping"></div>
             <span>LIVE</span>
