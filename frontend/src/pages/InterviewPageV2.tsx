@@ -2,13 +2,49 @@
  * Interview Page using ElevenLabs Conversational AI Agents
  * 
  * This version uses the ElevenLabs agent platform for the full conversation:
- * - Speech-to-text (STT) handled by ElevenLabs
  * - LLM responses from the agent's configured LLM (Gemini 2.0 Flash Lite)
- * - Text-to-speech (TTS) with the agent's voice
+ * - Text-to-speech (TTS) with the agent's voice (ENABLED)
  * - System prompts and first messages are configured in ElevenLabs dashboard
+ * 
+ * MIC MUTED MODE to prevent agent timeout and voice conflicts:
+ * - ElevenLabs mic is permanently muted (agent can't hear, but CAN speak)
+ * - User records locally using browser's Web Speech API
+ * - User clicks Send to submit their text answer via sendUserMessage
+ * - This prevents: agent timeout, recording agent's voice, auto-submit issues
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
+
+// Web Speech API type declarations
+interface SpeechRecognitionEvent extends Event {
+  resultIndex: number;
+  results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionErrorEvent extends Event {
+  error: string;
+  message: string;
+}
+
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start(): void;
+  stop(): void;
+  abort(): void;
+  onstart: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onend: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void) | null;
+  onerror: ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => void) | null;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition: new () => SpeechRecognition;
+    webkitSpeechRecognition: new () => SpeechRecognition;
+  }
+}
 import { useConversation } from "@elevenlabs/react";
 import HRAvatar from "../components/HRAvatar";
 import AcademicAvatar from "../components/AcademicAvatar";
@@ -42,11 +78,17 @@ const InterviewPageV2 = () => {
   const [interimTranscript, setInterimTranscript] = useState("");
   const [chatVisible, setChatVisible] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [isListening, setIsListening] = useState(false);
+  const [isRecordingLocally, setIsRecordingLocally] = useState(false); // Local speech recognition state
+  
+  // Keep ElevenLabs mic permanently muted - we use local recording instead
+  // This prevents agent timeout and auto-submit issues
+  const micMuted = true;
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const selectedAvatarRef = useRef<string | null>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null); // For local speech recognition
+  const userActivityIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null); // For sending user activity pings
   
   // Keep ref in sync with state
   useEffect(() => {
@@ -98,15 +140,18 @@ const InterviewPageV2 = () => {
   }, []);
 
   // ElevenLabs Conversation Hook
+  // Keep mic permanently muted so ElevenLabs doesn't listen for voice
+  // User records locally and submits via sendUserMessage (text)
+  // Agent still speaks (TTS works), but doesn't listen (no STT/auto-submit)
   const conversation = useConversation({
+    micMuted, // Keep mic muted - prevents agent timeout and auto-submit
     onConnect: () => {
-      console.log("✅ Connected to ElevenLabs agent");
+      console.log("✅ Connected to ElevenLabs agent (mic muted)");
       setConnectionError(null);
       setIsLoading(false);
     },
     onDisconnect: (details) => {
       console.log("🔌 Disconnected from ElevenLabs agent", details);
-      setIsListening(false);
       // Show disconnect reason if available
       if (details) {
         console.log("Disconnect details:", JSON.stringify(details));
@@ -152,10 +197,32 @@ const InterviewPageV2 = () => {
       // mode.mode can be "speaking" or "listening"
       if (mode.mode === "speaking") {
         setSpeakingAvatar(selectedAvatarRef.current);
-        setIsListening(false);
+        // IMPORTANT: Stop local recording when agent starts speaking
+        // This prevents recording the agent's voice
+        if (recognitionRef.current) {
+          console.log("🛑 Stopping local recording - agent is speaking");
+          recognitionRef.current.stop();
+          recognitionRef.current = null;
+        }
+        // Stop user activity pings while agent is speaking
+        if (userActivityIntervalRef.current) {
+          clearInterval(userActivityIntervalRef.current);
+          userActivityIntervalRef.current = null;
+        }
       } else {
+        // Agent finished speaking, now waiting for user
         setSpeakingAvatar(null);
-        setIsListening(true);
+        // START sending user activity pings to prevent agent timeout
+        // This tells the agent "user is still here, thinking"
+        if (!userActivityIntervalRef.current) {
+          console.log("📤 Starting user activity pings to prevent timeout");
+          userActivityIntervalRef.current = setInterval(() => {
+            if (conversation.sendUserActivity) {
+              conversation.sendUserActivity();
+              console.log("📤 Ping: user is thinking...");
+            }
+          }, 1500); // Every 1.5 seconds
+        }
       }
     },
   });
@@ -174,8 +241,94 @@ const InterviewPageV2 = () => {
       if (conversation.status === "connected") {
         conversation.endSession();
       }
+      // Cleanup speech recognition
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      // Cleanup user activity interval
+      if (userActivityIntervalRef.current) {
+        clearInterval(userActivityIntervalRef.current);
+      }
     };
   }, []);
+
+  // Setup local speech recognition for recording user's answer
+  const startLocalRecording = useCallback(() => {
+    // Don't start recording if agent is speaking
+    if (conversation.isSpeaking) {
+      console.log("⚠️ Cannot start recording while agent is speaking");
+      return;
+    }
+
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      setConnectionError("Speech recognition not supported in this browser. Please type your answer.");
+      return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onstart = () => {
+      console.log("🎤 Local recording started");
+      setIsRecordingLocally(true);
+      // Activity pings are already running from onModeChange
+    };
+
+    recognition.onresult = (event) => {
+      let interim = '';
+      let final = '';
+      
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          final += transcript + ' ';
+        } else {
+          interim += transcript;
+        }
+      }
+      
+      if (final) {
+        setUserInput(prev => (prev + ' ' + final).trim());
+      }
+      setInterimTranscript(interim);
+    };
+
+    recognition.onerror = (event) => {
+      console.error("Speech recognition error:", event.error);
+      if (event.error !== 'no-speech') {
+        setConnectionError(`Speech recognition error: ${event.error}`);
+      }
+    };
+
+    recognition.onend = () => {
+      console.log("🎤 Local recording ended");
+      setIsRecordingLocally(false);
+      setInterimTranscript('');
+      // Don't stop activity pings here - they should keep running until user submits
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  }, [conversation]);
+
+  const stopLocalRecording = useCallback(() => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+  }, []);
+
+  // Send user activity when typing to prevent agent timeout
+  const handleInputChange = useCallback((value: string) => {
+    setUserInput(value);
+    // Notify agent that user is active (typing)
+    if (conversation.sendUserActivity && interviewStarted) {
+      conversation.sendUserActivity();
+    }
+  }, [conversation, interviewStarted]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -183,12 +336,19 @@ const InterviewPageV2 = () => {
       setAttachedFile(file);
       
       try {
+        console.log("📎 Reading file:", file.name, "Type:", file.type, "Size:", file.size);
         const content = await readFileContent(file);
         setFileContent(content);
-        console.log("📎 File attached:", file.name);
+        console.log("📎 File content extracted, length:", content.length);
+        console.log("📎 Content preview:", content.substring(0, 300));
+        
+        // Check if PDF extraction worked
+        if (content.startsWith('[') && content.includes('Error')) {
+          alert("Warning: Could not extract text from PDF. The file might be scanned or protected.");
+        }
       } catch (error) {
         console.error("Error reading file:", error);
-        alert("Error reading file. Please try a text file (.txt) for now.");
+        alert("Error reading file. Please try a different PDF or text file.");
       }
       
       e.target.value = "";
@@ -234,18 +394,23 @@ const InterviewPageV2 = () => {
       
       if (fileContent) {
         // Pass the report content to the agent (truncated if too long)
-        dynamicVariables.internship_report = fileContent.substring(0, 5000);
+        // ElevenLabs has limits on dynamic variable size - keep it reasonable
+        const truncatedContent = fileContent.substring(0, 4000);
+        dynamicVariables.internship_report = truncatedContent;
+        console.log("📄 PDF content length:", fileContent.length, "chars, truncated to:", truncatedContent.length);
+        console.log("📄 PDF content preview:", truncatedContent.substring(0, 200) + "...");
       }
 
       console.log("🚀 Starting conversation with agent:", agentId);
-      console.log("📝 Dynamic variables:", dynamicVariables);
+      console.log("📝 Dynamic variables keys:", Object.keys(dynamicVariables));
+      console.log("📝 Dynamic variables:", JSON.stringify(dynamicVariables).substring(0, 500) + "...");
 
       // Start the conversation session
-      // The agent's first message and system prompt are configured in ElevenLabs dashboard
-      // Keep it simple - just connect with agentId
+      // Pass dynamic variables so the agent receives the file content and topic
       const conversationId = await conversation.startSession({
         agentId,
         connectionType: "websocket",
+        dynamicVariables: Object.keys(dynamicVariables).length > 0 ? dynamicVariables : undefined,
       });
 
       console.log("✅ Conversation started:", conversationId);
@@ -259,11 +424,16 @@ const InterviewPageV2 = () => {
 
   const handleEndInterview = async () => {
     try {
+      // Stop all activity
+      stopLocalRecording();
+      if (userActivityIntervalRef.current) {
+        clearInterval(userActivityIntervalRef.current);
+        userActivityIntervalRef.current = null;
+      }
       await conversation.endSession();
       setInterviewStarted(false);
       setMessages([]);
       setSpeakingAvatar(null);
-      setIsListening(false);
     } catch (err) {
       console.error("Error ending interview:", err);
     }
@@ -274,8 +444,13 @@ const InterviewPageV2 = () => {
     if (newAvatarId === selectedAvatar) return;
     if (conversation.isSpeaking) return; // Don't switch while speaking
     
+    // Stop all activity before switching
+    stopLocalRecording();
+    if (userActivityIntervalRef.current) {
+      clearInterval(userActivityIntervalRef.current);
+      userActivityIntervalRef.current = null;
+    }
     setIsLoading(true);
-    setIsListening(false);
     
     try {
       // End current session
@@ -313,6 +488,15 @@ const InterviewPageV2 = () => {
   const handleSendTextMessage = () => {
     if (!userInput.trim() || conversation.isSpeaking) return;
 
+    // Stop activity pings - we're submitting the answer now
+    if (userActivityIntervalRef.current) {
+      clearInterval(userActivityIntervalRef.current);
+      userActivityIntervalRef.current = null;
+    }
+
+    // Stop local recording if active
+    stopLocalRecording();
+
     // Add user message to chat
     setMessages(prev => [...prev, {
       id: getNextMessageId(),
@@ -340,12 +524,20 @@ const InterviewPageV2 = () => {
     }
   };
 
-  // ElevenLabs handles voice automatically, but we provide this for the InputBar component
-  // In this version, clicking the mic button shows the listening status
+  // Toggle local recording - records speech locally and adds to userInput
+  // User must click Send to submit their answer (prevents agent timeout)
   const handleToggleRecording = () => {
-    // ElevenLabs handles voice activity detection automatically
-    // This button can be used to show status or potentially mute/unmute in future
-    console.log("🎤 Voice is handled automatically by ElevenLabs agent");
+    // Don't allow recording while agent is speaking
+    if (conversation.isSpeaking) {
+      console.log("⚠️ Cannot toggle recording while agent is speaking");
+      return;
+    }
+    
+    if (isRecordingLocally) {
+      stopLocalRecording();
+    } else {
+      startLocalRecording();
+    }
   };
 
   if (!interviewStarted) {
@@ -516,7 +708,7 @@ const InterviewPageV2 = () => {
                 conversation.status === "connected" ? "bg-green-500" : "bg-yellow-500 animate-pulse"
               }`}></span>
               {conversation.status === "connected" ? "Connected" : "Connecting..."}
-              {isListening && " • Listening..."}
+              {isRecordingLocally && " • Recording..."}
               {conversation.isSpeaking && " • Speaking..."}
             </span>
             <button
@@ -538,33 +730,33 @@ const InterviewPageV2 = () => {
                 <LoadingIndicator isProcessingFollowUp={false} isLoading={isLoading} />
               )}
 
-              {isListening && interimTranscript && (
+              {isRecordingLocally && (userInput || interimTranscript) && (
                 <RecordingIndicator userInput={userInput} interimTranscript={interimTranscript} />
               )}
 
-              {/* Show listening indicator when ElevenLabs is listening */}
-              {isListening && !interimTranscript && !conversation.isSpeaking && (
+              {/* Show recording indicator when locally recording */}
+              {isRecordingLocally && !userInput && !interimTranscript && !conversation.isSpeaking && (
                 <div className="flex justify-center my-6">
-                  <div className="bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-3 rounded-full shadow-lg animate-pulse">
+                  <div className="bg-gradient-to-r from-red-500 to-red-600 text-white px-6 py-3 rounded-full shadow-lg animate-pulse">
                     <div className="flex items-center gap-3">
                       <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
                       </svg>
-                      <span className="font-semibold">🎤 Listening... Speak now!</span>
+                      <span className="font-semibold">🎤 Recording... Speak now!</span>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Show prompt to speak when not listening and last message was a question */}
-              {!conversation.isSpeaking && !isListening && messages.length > 0 && messages[messages.length - 1].type === "question" && (
+              {/* Show prompt to record/type when not recording and last message was a question */}
+              {!conversation.isSpeaking && !isRecordingLocally && messages.length > 0 && messages[messages.length - 1].type === "question" && (
                 <div className="flex justify-center my-6">
-                  <div className="bg-gradient-to-r from-[#A84448] to-[#8B3639] text-white px-6 py-3 rounded-full shadow-lg animate-bounce">
+                  <div className="bg-gradient-to-r from-[#A84448] to-[#8B3639] text-white px-6 py-3 rounded-full shadow-lg">
                     <div className="flex items-center gap-3">
                       <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
                       </svg>
-                      <span className="font-semibold">Speak to answer or type below</span>
+                      <span className="font-semibold">Click 🎤 to record or type your answer, then click Send</span>
                     </div>
                   </div>
                 </div>
@@ -577,11 +769,11 @@ const InterviewPageV2 = () => {
           <InputBar
             userInput={userInput}
             interimTranscript={interimTranscript}
-            isRecording={isListening}
+            isRecording={isRecordingLocally}
             isSpeaking={conversation.isSpeaking}
             isLoading={isLoading}
             chatVisible={chatVisible}
-            onInputChange={setUserInput}
+            onInputChange={handleInputChange}
             onKeyPress={handleKeyPress}
             onToggleRecording={handleToggleRecording}
             onSubmit={handleSendTextMessage}
@@ -602,11 +794,11 @@ const InterviewPageV2 = () => {
           <InputBar
             userInput={userInput}
             interimTranscript={interimTranscript}
-            isRecording={isListening}
+            isRecording={isRecordingLocally}
             isSpeaking={conversation.isSpeaking}
             isLoading={isLoading}
             chatVisible={chatVisible}
-            onInputChange={setUserInput}
+            onInputChange={handleInputChange}
             onKeyPress={handleKeyPress}
             onToggleRecording={handleToggleRecording}
             onSubmit={handleSendTextMessage}
