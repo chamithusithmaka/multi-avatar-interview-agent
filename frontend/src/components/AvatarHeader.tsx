@@ -17,6 +17,7 @@ interface AvatarHeaderProps {
   speakingAvatar: string | null;
   isSpeaking: boolean;
   onSelectAvatar: (avatarId: string) => void;
+  disableSelection?: boolean;
 }
 
 const AvatarHeader: FC<AvatarHeaderProps> = ({
@@ -26,6 +27,7 @@ const AvatarHeader: FC<AvatarHeaderProps> = ({
   speakingAvatar,
   isSpeaking,
   onSelectAvatar,
+  disableSelection = false,
 }) => {
   return (
     <div className="border-b border-gray-200 bg-white shadow-sm sticky top-0 z-10">
@@ -40,15 +42,17 @@ const AvatarHeader: FC<AvatarHeaderProps> = ({
             return (
               <div
                 key={avatarId}
-                className={`flex flex-col items-center flex-shrink-0 cursor-pointer transition-all ${
-                  isSpeaking && !isCurrentlySpeaking ? "opacity-50" : "hover:scale-105"
+                className={`flex flex-col items-center flex-shrink-0 transition-all ${
+                  disableSelection ? "cursor-default" : "cursor-pointer"
+                } ${
+                  isSpeaking && !isCurrentlySpeaking ? "opacity-50" : disableSelection ? "" : "hover:scale-105"
                 }`}
                 onClick={() => {
-                  if (!isSpeaking) {
+                  if (!isSpeaking && !disableSelection) {
                     onSelectAvatar(avatarId);
                   }
                 }}
-                title={isSpeaking ? "Wait for current speaker to finish" : `Select ${avatar.name}`}
+                title={disableSelection ? avatar.name : (isSpeaking ? "Wait for current speaker to finish" : `Select ${avatar.name}`)}
               >
                 <div className="relative flex items-center justify-center pt-3 pb-1">
                   {/* Selection ring - positioned absolutely behind */}
