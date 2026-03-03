@@ -60,6 +60,9 @@ import InputBar from "../components/InputBar";
 import LargeAvatarView from "../components/LargeAvatarView";
 import { readFileContent } from "../utils/fileService";
 import { AgentSwitchingService } from "../utils/agentSwitchingService";
+import {
+  playWelcomePrompt,
+} from "../utils/welcomePromptService";
 
 type Message = {
   id: number;
@@ -87,6 +90,8 @@ const VivaBot = ({ onNavigate }: VivaBotProps) => {
   const [chatVisible, setChatVisible] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [isRecordingLocally, setIsRecordingLocally] = useState(false); // Local speech recognition state
+  const [welcomePromptSpeaking, setWelcomePromptSpeaking] = useState(false); // Welcome prompt speaking state
+  const [welcomePromptDone, setWelcomePromptDone] = useState(false); // Whether welcome prompt has finished
   
   // Keep ElevenLabs mic permanently muted - we use local recording instead
   // This prevents agent timeout and auto-submit issues
@@ -111,6 +116,38 @@ const VivaBot = ({ onNavigate }: VivaBotProps) => {
     if (!selectedAvatar) {
       setSelectedAvatar('academic');
     }
+  }, []);
+
+  // Play welcome prompt from the academic agent when the page loads
+  useEffect(() => {
+    // Play the welcome prompt every time the page loads (before interview starts)
+    if (interviewStarted) {
+      setWelcomePromptDone(true);
+      return;
+    }
+
+    const cancel = playWelcomePrompt({
+      onStart: () => {
+        setWelcomePromptSpeaking(true);
+        setSpeakingAvatar('academic');
+      },
+      onEnd: () => {
+        setWelcomePromptSpeaking(false);
+        setSpeakingAvatar(null);
+        setWelcomePromptDone(true);
+      },
+      onError: () => {
+        setWelcomePromptSpeaking(false);
+        setSpeakingAvatar(null);
+        setWelcomePromptDone(true);
+      },
+    });
+
+    return () => {
+      cancel();
+      setWelcomePromptSpeaking(false);
+      setSpeakingAvatar(null);
+    };
   }, []);
 
   // ElevenLabs Agent IDs - these are your configured agents
@@ -629,6 +666,16 @@ const VivaBot = ({ onNavigate }: VivaBotProps) => {
             <p className="text-sm md:text-base text-gray-500 mt-2">
               Your viva will start with the Academic Person and automatically switch between interviewers
             </p>
+
+            {/* Welcome prompt speaking indicator */}
+            {welcomePromptSpeaking && (
+              <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-200 rounded-full text-blue-700 text-sm animate-pulse">
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.984 5.984 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.983 3.983 0 00-1.172-2.828 1 1 0 010-1.415z" clipRule="evenodd" />
+                </svg>
+                <span className="font-medium">Academic Person is speaking...</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -652,10 +699,17 @@ const VivaBot = ({ onNavigate }: VivaBotProps) => {
                   style={{ width: '280px', maxWidth: '90vw' }}
                 >
                   <div 
-                    className="transition-all duration-300 opacity-70"
+                    className={`transition-all duration-300 ${
+                    welcomePromptSpeaking && avatarId === 'academic'
+                      ? 'opacity-100 scale-110'
+                      : 'opacity-70'
+                  }`}
                     style={{ width: '220px', height: '220px' }}
                   >
-                    <AvatarComponent isActive={false} isSpeaking={false} />
+                    <AvatarComponent
+                      isActive={welcomePromptSpeaking && avatarId === 'academic'}
+                      isSpeaking={welcomePromptSpeaking && avatarId === 'academic'}
+                    />
                   </div>
                   <div className="mt-4 md:mt-6 text-center">
                     <span className="text-lg md:text-2xl font-bold text-gray-900 block mb-1">
@@ -772,6 +826,7 @@ const VivaBot = ({ onNavigate }: VivaBotProps) => {
             speakingAvatar={speakingAvatar}
             isSpeaking={conversation.isSpeaking}
             onSelectAvatar={handleSwitchAvatar}
+            disableSelection={true}
           />
 
           
@@ -868,6 +923,7 @@ const VivaBot = ({ onNavigate }: VivaBotProps) => {
             speakingAvatar={speakingAvatar}
             isSpeaking={conversation.isSpeaking}
             onSelectAvatar={handleSwitchAvatar}
+            disableSelection={true}
           />
 
           <InputBar
